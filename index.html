@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" class="study-mode" data-study4="true">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Study 4: Multi-stream Motion Fusion</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0f1117;color:#e2e4f0;font:14px system-ui;display:flex;flex-direction:column;height:100dvh}
+#viewer{display:flex;flex-direction:column;flex:1;min-height:0}
+.study-mode #viewer{display:none}
+.study-card{width:min(720px,calc(100% - 32px));margin:32px auto;padding:24px;background:#1a1d27;border:1px solid #30354b;border-radius:10px}
+.study-card p,.study-card li{line-height:1.6}
+.study-card label{display:block;white-space:normal;margin:18px 0}
+.study-card input[type="text"]{display:block;width:100%;margin-top:6px}
+.study-error{color:#ffaaa2;white-space:pre-wrap}
+#session-toolbar:not([hidden]){display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 16px;background:#1a1d27;border-bottom:1px solid #30354b}
+#session-progress{flex:1}#completion-code{font:20px monospace}
+header{padding:12px 16px;background:#1a1d27;border-bottom:1px solid #30354b}
+h1{font-size:19px;margin:0 0 10px}
+nav,.controls,#voting{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+input,select,button,a.study-submit{background:#232637;color:#e2e4f0;border:1px solid #454c6b;border-radius:6px;padding:8px}
+a.study-submit{display:inline-block;text-decoration:none}
+button{cursor:pointer}button:disabled{opacity:.4;cursor:default}
+button[aria-pressed="true"]{background:#314b7c;border-color:#9ebdff}
+#search{width:210px}#sample{max-width:250px}
+#summary{margin-top:10px;font-size:20px;line-height:1.6;white-space:pre-wrap}
+#settings{font-size:11px;color:#acb5ce;margin-top:6px}
+#error{color:#ffaaa2;white-space:pre-wrap;padding:8px 16px}
+#stage{position:relative;flex:1;min-height:330px;overflow:hidden}
+#canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#panes{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--pane-count,4),minmax(0,1fr))}
+.pane{min-width:0;position:relative;border-right:1px solid #30354b}
+.label{position:absolute;top:8px;left:6px;right:6px;background:#141825dd;border-radius:4px;padding:6px;font-size:11px;pointer-events:none}
+.label strong{display:block;font-size:14px;color:#c9d8ff}
+.label small{display:block;color:#a6b0cb;margin-top:3px}
+.pending{position:absolute;left:8px;right:8px;top:48%;text-align:center;color:#a6b0cb;pointer-events:none}
+.controls,#voting{padding:10px 16px;background:#1a1d27;border-top:1px solid #30354b}
+#timeline{flex:1;min-width:100px}label{white-space:nowrap}
+#vote-status{font-size:12px;color:#b8c9ea}
+@media(max-width:850px){#panes{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(var(--pane-rows,2),minmax(0,1fr))}#stage{min-height:600px}#settings{display:none}}
+</style>
+<script type="importmap">
+{"imports":{"three":"./static/vendor/three/three.module.js"}}
+</script>
+<script>if(["/study","/study2","/study3","/study2-csv"].includes(location.pathname.replace(/\/$/,""))||new URLSearchParams(location.search).get("mode")==="csv")document.documentElement.classList.add("study-mode");</script>
+</head>
+<body>
+<section id="study-intro" class="study-card" hidden>
+<h1>Study 4: Multi-stream Motion Fusion</h1>
+<p>Help us evaluate how well movements from multiple source motions can be combined into one coherent animation. For each example, compare two outputs against the prompt and input motions, and choose the one that best follows the requested movements while looking natural.</p>
+<p id="task-summary">Loading the task...</p>
+<p id="csv-notice" hidden>This version saves answers only in this browser, not on the server. Download the CSV after finishing and send it to the study organizer. Clearing browser data will erase locally saved answers.</p>
+<ol>
+<li>Read the prompt and requested length. Source numbers in the prompt refer to the labeled input panes.</li>
+<li>Compare anonymous outputs A and B. Prefer the one that follows the assigned motions and looks natural and coherent.</li>
+<li>Choose <strong>Tie</strong> if they are similarly good.</li>
+<li>Drag within a motion pane to rotate the 3D view. Scroll or pinch to zoom. Use <strong>Reset cameras</strong> to restore the default view.</li>
+</ol>
+<form id="study-start">
+<label>Participant or worker ID (optional)
+<input id="participant-id" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Use an assigned ID, not your name or email">
+</label>
+<label><input id="instructions-read" type="checkbox" required> I have read the instructions.</label>
+<button id="start-session" type="submit" disabled>Start session</button>
+</form>
+<p>Sessions are independent of browser cookies. Before another person uses this tab, choose <strong>New participant</strong>. Refreshing resumes the current session.</p>
+<div id="study-start-error" class="study-error" role="alert"></div>
+</section>
+<div id="session-toolbar" hidden>
+<span id="session-participant"></span><strong id="session-progress" role="status" aria-live="polite"></strong>
+<span id="session-sync-status" role="status" aria-live="polite"></span>
+<button id="retry-sync" hidden>Retry saving</button>
+<button id="new-participant">New participant</button>
+</div>
+<section id="study-syncing" class="study-card" hidden>
+<h1>All comparisons answered. Finishing your saves...</h1>
+<p>Your votes are stored on this device. Keep this tab open while they sync. Your completion code will appear after the server confirms every vote.</p>
+</section>
+<section id="study-complete" class="study-card" hidden>
+<h1>Thank you. Your session is complete.</h1>
+<p>All your votes have been saved. If the task organizer requests a completion code, submit the code below.</p>
+<label>Completion code<input id="completion-code" type="text" readonly></label>
+<div id="study3-completion-actions" hidden>
+<p>Download your CSV, then open the Google Form to submit your results.</p>
+<button id="download-study3-csv">Download CSV</button>
+<a class="study-submit" href="https://forms.gle/qMFr4ivYKkqCP9qf8" target="_blank" rel="noopener noreferrer">Submit via Google Form</a>
+<div id="study3-csv-error" class="study-error" role="alert"></div>
+</div>
+<p>Use <strong>New participant</strong> before another person uses this tab.</p>
+</section>
+<section id="csv-complete" class="study-card" hidden>
+<h1>Thank you. Your session is complete.</h1>
+<p>Download your answers as a CSV and send the file to the study organizer. If the automatic download did not start, use the button below.</p>
+<button id="download-csv">Download CSV</button>
+<span id="csv-form-submit" hidden>
+<a class="study-submit" href="https://forms.gle/qMFr4ivYKkqCP9qf8" target="_blank" rel="noopener noreferrer">Submit via Google Form</a>
+</span>
+<p id="csv-form-help" hidden>After downloading your CSV, open the Google Form to submit your results.</p>
+<p>Your answers remain saved in this browser. Download the file before starting a new participant.</p>
+<div id="csv-export-error" class="study-error" role="alert"></div>
+</section>
+<main id="viewer">
+<header>
+<h1>Which output best follows the prompt?</h1>
+<nav>
+<input id="search" type="search" placeholder="Search sample or prompt" aria-label="Search">
+<select id="k" aria-label="Number of input motions">
+<option value="">All source counts</option>
+<option value="2">k=2</option><option value="3">k=3</option>
+</select>
+<button id="prev">Previous</button><select id="sample" aria-label="Sample"></select>
+<button id="next">Next</button><span id="count"></span><span id="progress"></span>
+</nav>
+<div id="summary"></div><div id="settings"></div>
+</header>
+<div id="error" role="alert" hidden></div>
+<div id="stage"><canvas id="canvas"></canvas><div id="panes"></div></div>
+<div class="controls">
+<button id="play">Pause</button>
+<input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Frame">
+<span id="time"></span>
+<select id="speed" aria-label="Playback speed">
+<option value=".25">0.25x</option><option value=".5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option>
+</select>
+<label><input id="center" type="checkbox"> Center pelvis</label>
+<label><input id="sync" type="checkbox" checked> Link cameras</label>
+<label hidden><input id="highlight" type="checkbox"> Highlight parts</label>
+<button id="reset">Reset cameras</button>
+</div>
+<div id="voting" role="group" aria-label="Vote for the best output">
+<strong>Your vote:</strong>
+<button data-choice="a" disabled aria-pressed="false">Output A</button>
+<button data-choice="b" disabled aria-pressed="false">Output B</button>
+<button data-choice="tie" disabled aria-pressed="false">Tie</button>
+<span id="vote-status" role="status" aria-live="polite">Loading comparison...</span>
+</div>
+</main>
+<script>
+window.__mixamoVoting=true;
+window.addEventListener("error",event=>{
+  const box=document.getElementById("error");
+  box.hidden=false;box.textContent=event.message||"Viewer dependency failed to load.";
+},true);
+</script>
+<script type="module" src="./static/mixamo_csv_boot.js?v=study4-pages-20261113"></script>
+</body>
+</html>
